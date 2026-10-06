@@ -1,98 +1,100 @@
+[English](README.md) | [繁體中文（香港）](README.zh-HK.md) | [简体中文](README.zh-CN.md)
+
 # hk-gov-rt-mcp
 
-把香港政府 data.gov.hk（氣象 + 運輸分類）的即時開放數據 API 包裝成 MCP（Model Context Protocol）伺服器。
+An MCP (Model Context Protocol) server wrapping Hong Kong government real-time open data APIs from the weather and transport categories on data.gov.hk.
 
-**雙實作**：同一份工具契約，兩種語言實作，功能與輸出格式一致：
+**Dual implementations** — one shared tool contract, two languages, identical tools, parameters and output format:
 
-| 實作 | 位置 | 技術 | 啟動 |
+| Implementation | Location | Tech | Run |
 |---|---|---|---|
-| TypeScript | `ts/` | 官方 `@modelcontextprotocol/sdk` ^1.32 + zod + Node ≥20 | `node ts/dist/index.js` |
-| Go | `go/` | 官方 `github.com/modelcontextprotocol/go-sdk` v1.8.0 | `go/bin/hk-gov-mcp` |
+| TypeScript | `ts/` | Official `@modelcontextprotocol/sdk` ^1.32 + zod + Node ≥20 | `node ts/dist/index.js` |
+| Go | `go/` | Official `github.com/modelcontextprotocol/go-sdk` v1.8.0 | `go/bin/hk-gov-mcp` (single static binary) |
 
-兩者皆支援 **stdio**（預設）與 **Streamable HTTP**（stateless）兩種傳輸，initialize 實測協商至協議修訂 **2025-11-25**（現行官方 SDK 支援的最新修訂；官方規範站最新文檔為 2026-07-28）。全部工具標註 `readOnlyHint` annotation，並提供伺服器級 `instructions`。
+Both support the **stdio** (default) and **Streamable HTTP** (stateless) transports. The initialize handshake negotiates protocol revision **2025-11-25** — the newest revision supported by the current official SDKs (the spec site's latest documentation is 2026-07-28). Every tool carries a `readOnlyHint` annotation, and the server provides top-level `instructions`.
 
-## 工具清單（23 個）
+## Tools (23)
 
-所有工具均可選 `lang` 參數：`tc`（繁體中文，預設）/ `sc`（简体中文）/ `en`。
+All tools accept an optional `lang` parameter: `tc` (Traditional Chinese, default) / `sc` (Simplified Chinese) / `en` (English).
 
-### 氣象 — 香港天文台 HKO（data.weather.gov.hk）
+### Weather — Hong Kong Observatory (data.weather.gov.hk)
 
-| 工具 | 說明 |
+| Tool | Description |
 |---|---|
-| `get_current_weather` | 現時天氣：約 27 站氣溫、濕度、18 區雨量、UV 指數、天氣圖示、警告訊息 |
-| `get_local_forecast` | 本地預報：大勢、熱帶氣旋資訊、今明預報、展望 |
-| `get_9day_forecast` | 九天預報：每日天氣/氣溫/濕度/風力/顯著降雨概率 + 海水溫度 |
-| `get_weather_warnings` | 生效中的天氣警告（摘要+詳情）及特別天氣提示；無警告時明確回覆 |
+| `get_current_weather` | Current weather report: temperatures at ~27 stations, humidity, rainfall by 18 districts, UV index, weather icon and any warning messages |
+| `get_local_forecast` | Local forecast: general situation, tropical cyclone info, today/tonight/tomorrow description, outlook |
+| `get_9day_forecast` | 9-day forecast: daily weather / min-max temperature / humidity range / wind / probability of significant rain, plus sea temperature |
+| `get_weather_warnings` | Warnings currently in force (summary + details) and special weather tips; replies explicitly when none are active |
 
-### 九巴 / 龍運 KMB（data.etabus.gov.hk）
+### KMB / Long Win (data.etabus.gov.hk)
 
-| 工具 | 說明 |
+| Tool | Description |
 |---|---|
-| `get_kmb_route_list` `route` | 按路線號查詢各變體（方向、起訖、service_type） |
-| `get_kmb_route_stops` `route, bound(O/I), service_type?` | 有序站名列表（含 stop id） |
-| `get_kmb_route_eta` `route, service_type?` | 全線實時到站（雙向，含備註） |
-| `get_kmb_stop_eta` `stop_id` | 單一車站所有路線實時到站 |
+| `get_kmb_route_list` · `route` | Route lookup (prefix match): each variant's direction, origin, destination and service_type |
+| `get_kmb_route_stops` · `route, bound(O/I), service_type?` | Ordered stop list with stop ids |
+| `get_kmb_route_eta` · `route, service_type?` | Live ETAs for every stop (both directions, with remarks) |
+| `get_kmb_stop_eta` · `stop_id` | Live ETAs of all routes serving one stop |
 
-### 城巴 CTB（rt.data.gov.hk/v2/transport/citybus）
+### Citybus CTB (rt.data.gov.hk/v2/transport/citybus)
 
-| 工具 | 說明 |
+| Tool | Description |
 |---|---|
-| `get_ctb_route_list` `route` | 按路線號查詢（起訖） |
-| `get_ctb_route_stops` `route, direction(outbound/inbound)` | 有序站名列表 |
-| `get_ctb_route_eta` `route, direction` | 全線逐站實時到站（由 per-stop ETA 彙組） |
-| `get_ctb_stop_eta` `route, stop_id` | 單站單線實時到站 |
+| `get_ctb_route_list` · `route` | Route lookup with origin/destination |
+| `get_ctb_route_stops` · `route, direction(outbound/inbound)` | Ordered stop list |
+| `get_ctb_route_eta` · `route, direction` | Stop-by-stop live ETAs (assembled from the per-stop ETA API) |
+| `get_ctb_stop_eta` · `route, stop_id` | Live ETAs of one stop for one route |
 
-### 港鐵 MTR（rt.data.gov.hk/v1/transport/mtr）
+### MTR (rt.data.gov.hk/v1/transport/mtr)
 
-| 工具 | 說明 |
+| Tool | Description |
 |---|---|
-| `get_mtr_schedule` `line, station` | 重鐵實時班次（平台/方向、目的地、ttnt、延誤旗標） |
-| `get_mtr_station_codes` `query` | 以站名（中英）或代碼查 line/station code（內嵌 10 線 120 站對照表） |
-| `get_lrt_schedule` `station_id` | 輕鐵實時班次（內嵌 68 站 id 對照表，如 100=兆康） |
-| `get_mtr_bus_schedule` `route` | 港鐵巴士實時班次（上游暫不穩定，會優雅回報） |
+| `get_mtr_schedule` · `line, station` | Heavy rail live schedule: next trains per platform/direction with destination, minutes-to-train (ttnt) and service-delay flag |
+| `get_mtr_station_codes` · `query` | Find line/station codes by station name (any language) or code — embedded 10-line / 120-station table |
+| `get_lrt_schedule` · `station_id` | Light Rail live schedule — embedded 68-stop id table (e.g. 100 = Siu Hong) |
+| `get_mtr_bus_schedule` · `route` | MTR Bus live schedule (upstream unstable at the moment; reported gracefully) |
 
-### 專線小巴 GMB（data.etagmb.gov.hk）
+### Green Minibus GMB (data.etagmb.gov.hk)
 
-| 工具 | 說明 |
+| Tool | Description |
 |---|---|
-| `get_gmb_route_list` `region?(HKI/KLN/NT), route?` | 路線號清單 |
-| `get_gmb_route_variants` `region, route_code` | 取 route_id 變體與方向（route_seq） |
-| `get_gmb_route_stops` `route_id, route_seq` | 有序站名列表（含 stop_id） |
-| `get_gmb_eta` `route_id, stop_id` | 實時到站 |
+| `get_gmb_route_list` · `region?(HKI/KLN/NT), route?` | Route numbers |
+| `get_gmb_route_variants` · `region, route_code` | route_id variants with directions (route_seq) |
+| `get_gmb_route_stops` · `route_id, route_seq` | Ordered stop list with stop_ids |
+| `get_gmb_eta` · `route_id, stop_id` | Live ETA |
 
-### 運輸署 TD
+### Transport Department TD
 
-| 工具 | 說明 |
+| Tool | Description |
 |---|---|
-| `get_traffic_snapshot` `camera_ids?` | 交通快拍圖像 URL（CID API；上游對部分網絡回 403） |
-| `get_traffic_speed` | 主要路段實時速度/擠塞程度（速度地圖 XML；上游近來常 503） |
-| `get_parking_vacancy` `keyword?` | TD 參與停車場即時空位數（可按名稱/地區過濾） |
+| `get_traffic_snapshot` · `camera_ids?` | Live traffic camera snapshot image URLs (CID API) |
+| `get_traffic_speed` | Live average speed / saturation level (GOOD/AVERAGE/BAD) for major road links (speed map XML) |
+| `get_parking_vacancy` · `keyword?` | Live vacant-space counts at TD participating car parks (filter by name / district) |
 
-> 上游故障處理：`get_mtr_bus_schedule`、`get_traffic_snapshot`、`get_traffic_speed` 所對應的政府端點在開發當下（2026-10）暫時故障/受限（404/403/503），工具會以 `isError:false` 的可讀訊息說明現況與官方端點，服務恢復後即自動正常。其餘 20 個工具全部實測通過。
+> **Known upstream issues** — `get_mtr_bus_schedule` (404), `get_traffic_snapshot` (403) and `get_traffic_speed` (503) were broken or access-restricted upstream at development time (2026-10). The tools report this gracefully (readable message + official endpoint) instead of failing; they self-heal once the feeds recover. The other 20 tools are fully operational and verified.
 
-## 典型呼叫流程
+## Typical flows
 
-- 巴士到站：`get_kmb_route_list(1A)` → `get_kmb_route_stops(1A, O, 1)` → `get_kmb_route_eta(1A, 1)` 或 `get_kmb_stop_eta(stop_id)`
-- 港鐵：`get_mtr_station_codes("中環")` → `get_mtr_schedule(twl, cen)`
-- 小巴：`get_gmb_route_list(HKI, 1)` → `get_gmb_route_variants(HKI, "1")` → `get_gmb_route_stops(route_id, route_seq)` → `get_gmb_eta(route_id, stop_id)`
-- 泊車：`get_parking_vacancy("沙田")`
+- **Bus ETA**: `get_kmb_route_list(1A)` → `get_kmb_route_stops(1A, O, 1)` → `get_kmb_route_eta(1A, 1)` or `get_kmb_stop_eta(stop_id)`
+- **MTR**: `get_mtr_station_codes("Central")` → `get_mtr_schedule(twl, cen)`
+- **GMB**: `get_gmb_route_list(HKI, 1)` → `get_gmb_route_variants(HKI, "1")` → `get_gmb_route_stops(route_id, route_seq)` → `get_gmb_eta(route_id, stop_id)`
+- **Parking**: `get_parking_vacancy("Sha Tin")`
 
-## 接入配置
+## Wiring it up
 
-### ZCode / Claude Desktop — TypeScript 版
+### ZCode / Claude Desktop — TypeScript
 
 ```json
 {
   "mcpServers": {
     "hk-gov": {
       "command": "node",
-      "args": ["/Users/cheukfungwu/.zcode/workspace/default/hk-gov-rt-mcp/ts/dist/index.js"]
+      "args": ["/absolute/path/to/hk-gov-rt-mcp/ts/dist/index.js"]
     }
   }
 }
 ```
 
-### ZCode / Claude Desktop — Go 版
+### ZCode / Claude Desktop — Go
 
 ```bash
 cd go && go build -o bin/hk-gov-mcp .
@@ -102,58 +104,58 @@ cd go && go build -o bin/hk-gov-mcp .
 {
   "mcpServers": {
     "hk-gov-go": {
-      "command": "/Users/cheukfungwu/.zcode/workspace/default/hk-gov-rt-mcp/go/bin/hk-gov-mcp"
+      "command": "/absolute/path/to/hk-gov-rt-mcp/go/bin/hk-gov-mcp"
     }
   }
 }
 ```
 
-### Streamable HTTP 模式（遠端/多 client）
+### Streamable HTTP mode (remote / multiple clients)
 
 ```bash
-# TS
+# TypeScript
 node ts/dist/index.js --http --port 8819
 # Go
 go/bin/hk-gov-mcp -http 127.0.0.1:8819
 ```
 
-接入配置改為 URL 型式：
+Then point the client at the URL:
 
 ```json
 { "mcpServers": { "hk-gov": { "url": "http://127.0.0.1:8819/mcp" } } }
 ```
 
-## 開發與測試
+## Development & tests
 
 ```bash
 # TypeScript
 cd ts && npm install && npm run build && npm run smoke
-npx @modelcontextprotocol/inspector node dist/index.js   # 人工複核
+npx @modelcontextprotocol/inspector node dist/index.js   # manual inspection
 
 # Go
 cd go && go build -o bin/hk-gov-mcp . && go test -v -timeout 12m .
 ```
 
-冒煙測試會以 in-memory transport 直連伺服器並逐一實呼 23 個工具（打真實上游 API）。
+The smoke tests connect an MCP client over in-memory transport and call all 23 tools against the live upstream APIs.
 
-## 快取策略（兩版一致）
+## Caching policy (identical in both implementations)
 
-| 資料 | TTL |
+| Data | TTL |
 |---|---|
-| 實時到站 ETA | 20s |
-| 現時天氣 / 警告 | 60s |
-| 天氣預報 | 10 min |
-| 速度地圖 | 2 min |
-| 泊車空位 | 60s |
-| 路線/站點靜態資料 | 6 h |
+| Live ETAs | 20s |
+| Current weather / warnings | 60s |
+| Forecasts | 10 min |
+| Speed map | 2 min |
+| Car park vacancy | 60s |
+| Route / stop static data | 6h |
 
-上游逾時 10s（城巴路線總表 30s）；錯誤統一回 `isError: true` 的可讀訊息，不會令 MCP 連線中斷。失敗結果快取 30s 以免衝擊故障中的上游。
+Upstream timeouts are 10s (30s for the large Citybus route list); failures return a readable `isError: true` message so the MCP connection never breaks. Failed fetches are cached for 30s to avoid hammering a failing upstream.
 
-## 資料來源
+## Data sources
 
-- 天文台：`data.weather.gov.hk/weatherAPI/opendata`（rhrread / flw / fnd / warnsum / warningInfo / swt）
-- 九巴：`data.etabus.gov.hk`（v1 open API）
-- 城巴 / 港鐵 / 輕鐵 / 港鐵巴士 / CID：`rt.data.gov.hk`
-- 專線小巴：`data.etagmb.gov.hk`
-- 運輸署：`resource.data.one.gov.hk/td/*`（速度地圖、停車場）、`api.data.gov.hk/v1/carpark-info-vacancy`
-- 港鐵站碼表：`opendata.mtr.com.hk` CSV（`mtr_lines_and_stations.csv`、`light_rail_routes_and_stops.csv`）→ 產生為內嵌 JSON（`ts/src/transport/data/`、`go/internal/hkapi/data/`）
+- HKO: `data.weather.gov.hk/weatherAPI/opendata` (rhrread / flw / fnd / warnsum / warningInfo / swt)
+- KMB: `data.etabus.gov.hk` (v1 open API)
+- Citybus / MTR / Light Rail / MTR Bus / CID: `rt.data.gov.hk`
+- Green minibus: `data.etagmb.gov.hk`
+- Transport Department: `resource.data.one.gov.hk/td/*` (speed map, car parks), `api.data.gov.hk/v1/carpark-info-vacancy`
+- MTR station code tables: generated from `opendata.mtr.com.hk` CSVs (`mtr_lines_and_stations.csv`, `light_rail_routes_and_stops.csv`) into the embedded JSON under `ts/src/transport/data/` and `go/internal/hkapi/data/`
