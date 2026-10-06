@@ -3,6 +3,7 @@ import { cached, TTL } from "../cache.js";
 import { type Lang } from "../lang.js";
 import mtrStations from "./data/mtr-stations.json" with { type: "json" };
 import lrtStops from "./data/lrt-stops.json" with { type: "json" };
+import frequencies from "./data/mtr-frequencies.json" with { type: "json" };
 
 type Row = Record<string, unknown>;
 
@@ -33,6 +34,11 @@ export async function trainSchedule(line: string, station: string, lang: Lang): 
   if (d.error) {
     return `MTR API error ${JSON.stringify(d.error)} — check line/station codes. Valid lines: ${lineCodes.join(", ")}.`;
   }
+  // status:0 = service notice (special arrangements / suspended station), with message + optional url
+  if (d.status === 0 && typeof d.message === "string" && d.message) {
+    const url = typeof d.url === "string" && d.url ? `\nInfo: ${d.url}` : "";
+    return `MTR service notice: ${d.message}${url}`;
+  }
   const data = (d.data as Record<string, Row> | undefined) ?? {};
   const lines: string[] = [];
   const lc = line.toUpperCase();
@@ -54,7 +60,7 @@ export async function trainSchedule(line: string, station: string, lang: Lang): 
       );
     }
   }
-  if (d.isdelay === true) lines.push("⚠ MTR reports service delay.");
+  if (d.isdelay === true || d.isdelay === "Y") lines.push("⚠ MTR reports service delay.");
   lines.push(`(sys_time ${String(d.sys_time ?? "")})`);
   return lines.join("\n") || "No schedule data returned.";
 }
@@ -123,4 +129,78 @@ export async function lookupStationCodes(query: string, lang: Lang): Promise<str
     }
   }
   return lines.length > 0 ? lines.join("\n") : `No station matching "${query}". Valid lines: ${lineCodes.join(", ")}`;
+}
+
+/* ---------- published average headways (scraped from mtr.com.hk) ---------- */
+
+interface FreqEntry {
+  code: string | null;
+  lightRail: boolean;
+  segmentTc: string | null;
+  segmentEn: string | null;
+  labelTc: string | null;
+  labelEn: string | null;
+  bands: Record<string, string> | null;
+}
+interface FreqFile {
+  scrapedAt: string;
+  sources: string[];
+  bandsTc: Record<string, string>;
+  bandsEn: Record<string, string>;
+  notesTc: string;
+  notesEn: string;
+  entries: FreqEntry[];
+}
+const FREQ = frequencies as unknown as FreqFile;
+const BAND_KEYS_ORDER = ["amPeak", "pmPeak", "offPeak", "saturday", "sundayHoliday"] as const;
+
+const BAND_SHORT: Record<Lang, Record<string, string>> = {
+  tc: { amPeak: "平日朝繁", pmPeak: "平日晚繁", offPeak: "非繁忙", saturday: "週六", sundayHoliday: "假日" },
+  sc: { amPeak: "平日朝高峰", pmPeak: "平日晚高峰", offPeak: "非高峰", saturday: "週六", sundayHoliday: "假日" },
+  en: { amPeak: "AM peak", pmPeak: "PM peak", offPeak: "Off-peak", saturday: "Sat", sundayHoliday: "Sun&PH" },
+};
+
+/** Published average headways (minutes) for heavy rail lines/segments and
+ *  Light Rail routes. `line` filters: line code (TWL), LRT route (505 or
+ *  LRT-505), or a name fragment; omit for the whole table. */
+export function mtrFrequency(line: string | undefined, lang: Lang): string {
+  const t = lang === "en";
+  const all = FREQ.entries;
+  let list = all;
+  if (line && line.trim()) {
+    const q = line.trim().toUpperCase();
+    list = all.filter((e) => {
+      if (!e.code) return false;
+      if (e.code === q) return true;
+      if (e.code === `LRT-${q.replace(/^LRT-/, "")}`) return true;
+      const name = (e.labelTc ?? "") + (e.labelEn ?? "") + (e.segmentTc ?? "") + (e.segmentEn ?? "");
+      return name.toLowerCase().includes(line.trim().toLowerCase());
+    });
+    if (list.length === 0) {
+      const codes = [...new Set(all.map((e) => e.code).filter(Boolean))] as string[];
+      return `No frequency entry matching "${line}". Valid codes: ${codes.join(", ")}.`;
+    }
+  }
+  const bands = lang === "en" ? FREQ.bandsEn : FREQ.bandsTc;
+  const notes = lang === "en" ? FREQ.notesEn : FREQ.notesTc;
+  const short = BAND_SHORT[lang];
+  const header = t
+    ? `MTR published average headways (minutes) — static snapshot scraped ${FREQ.scrapedAt} from mtr.com.hk (not real-time; use get_mtr_schedule for live arrivals)`
+    : `港鐵公佈嘅平均班次（分鐘）— ${FREQ.scrapedAt} 從 mtr.com.hk 擷取嘅靜態快照（並非實時；實時到站請用 get_mtr_schedule）`;
+  const rows = list.map((e) => {
+    const b = e.bands ?? {};
+    const cells = BAND_KEYS_ORDER.map((k) => `${short[k]} ${b[k] ?? "-"}`).join(" | ");
+    const nameTc = e.segmentTc ?? e.labelTc ?? "";
+    const nameEn = e.segmentEn ?? e.labelEn ?? "";
+    const label = t ? `${e.code} ${nameEn}` : `${e.code} ${nameTc}${nameEn && nameEn !== nameTc ? ` / ${nameEn}` : ""}`;
+    return `${label}: ${cells}`;
+  });
+  return [
+    header,
+    `${bands.amPeak} | ${bands.pmPeak} | ${bands.offPeak} | ${bands.saturday} | ${bands.sundayHoliday}`,
+    ...rows,
+    "",
+    notes,
+    `${t ? "Source" : "來源"}: ${FREQ.sources[0]}`,
+  ].join("\n");
 }

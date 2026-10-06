@@ -273,6 +273,20 @@ func Register(server *mcp.Server) {
 		})
 	})
 
+	type mtrFreqArgs struct {
+		Line string `json:"line,omitempty" jsonschema:"Optional filter — line code (e.g. TWL) / LRT route number (e.g. 505 or LRT-505) / name fragment. Omit for the whole table"`
+		Lang string `json:"lang,omitempty" jsonschema:"Output language — tc 繁體中文 / sc 简体中文 / en English,default=tc"`
+	}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_mtr_frequency",
+		Description: "Published average train headways (minutes) for all MTR heavy rail lines (with segments), Airport Express and Light Rail routes: weekday AM/PM peak, off-peak, Saturday, Sunday & holidays. Use for 'how often do trains run' / 'will trains still be running around <time>' questions. This is a STATIC SNAPSHOT scraped from mtr.com.hk (see returned date), NOT real-time — for live arrivals use get_mtr_schedule / get_lrt_schedule.",
+		Annotations: readOnly("MTR published train frequency"),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, a mtrFreqArgs) (*mcp.CallToolResult, any, error) {
+		return call(func(ctx context.Context) (string, error) {
+			return hkapi.MtrFrequency(a.Line, normalize(a.Lang)), nil
+		})
+	})
+
 	type lrtScheduleArgs struct {
 		StationID string `json:"station_id" jsonschema:"LRT numeric stop id e.g. 100"`
 		Lang      string `json:"lang,omitempty" jsonschema:"Output language — tc 繁體中文 / sc 简体中文 / en English,default=tc"`

@@ -13,7 +13,7 @@
 
 两者均支持 **stdio**（默认）与 **Streamable HTTP**（无状态）两种传输；initialize 实测协商至协议修订版 **2025-11-25**（当前官方 SDK 支持的最新修订；官方规范站最新文档为 2026-07-28）。所有工具均标注 `readOnlyHint` 注解，并提供服务器级 `instructions`。
 
-## 工具列表（23 个）
+## 工具列表（24 个）
 
 所有工具均可选 `lang` 参数：`tc`（繁體中文，默认）/ `sc`（简体中文）/ `en`（English）。
 
@@ -50,6 +50,7 @@
 |---|---|
 | `get_mtr_schedule` · `line, station` | 重铁实时班次（月台/方向、目的地、ttnt、延误标志） |
 | `get_mtr_station_codes` · `query` | 以站名（中英）或代码查询 line/station code（内置 10 线 120 站对照表） |
+| `get_mtr_frequency` · `line?` | 港铁公布的平均班次（平日朝/晚高峰、非高峰、星期六、星期日公众假期），覆盖全部重铁线（含分段）及轻铁路线 — 从 mtr.com.hk 抓取的静态快照（`scripts/scrape_mtr_frequencies.py`），可答「多久一班／那时候还有没有车」；并非实时 |
 | `get_lrt_schedule` · `station_id` | 轻铁实时班次（内置 68 站 id 对照表，如 100=兆康） |
 | `get_mtr_bus_schedule` · `route` | 港铁巴士实时班次（上游暂不稳定，会优雅回报） |
 
@@ -70,7 +71,7 @@
 | `get_traffic_speed` | 主要路段实时速度/拥堵程度（速度地图 XML） |
 | `get_parking_vacancy` · `keyword?` | TD 参与停车场的实时空位数（可按名称/地区过滤） |
 
-> **上游现状**：`get_mtr_bus_schedule`（404）、`get_traffic_snapshot`（403）、`get_traffic_speed`（503）对应的政府端点在开发时（2026-10）暂时故障或受限。工具会以可读信息（含官方端点）优雅回报，服务恢复后即自动正常；其余 20 个工具已全部实测可用。
+> **上游现状**：`get_mtr_bus_schedule`（404）、`get_traffic_snapshot`（403）、`get_traffic_speed`（503）对应的政府端点在开发时（2026-10）暂时故障或受限。工具会以可读信息（含官方端点）优雅回报，服务恢复后即自动正常；其余 21 个工具已全部实测可用。
 
 ## 典型调用流程
 
@@ -136,7 +137,7 @@ npx @modelcontextprotocol/inspector node dist/index.js   # 人工复核
 cd go && go build -o bin/hk-gov-mcp . && go test -v -timeout 12m .
 ```
 
-冒烟测试会以 in-memory transport 直连服务器，并逐一实呼 23 个工具（打真实上游 API）。
+冒烟测试会以 in-memory transport 直连服务器，并逐一实呼 24 个工具（打真实上游 API）。
 
 ## 缓存策略（两版一致）
 

@@ -31,6 +31,8 @@ const calls: Call[] = [
   { tool: "get_ctb_stop_eta", args: { route: "1", stop_id: "001027", lang: "tc" } },
   // MTR
   { tool: "get_mtr_station_codes", args: { query: "中環", lang: "tc" } },
+  { tool: "get_mtr_frequency", args: { line: "TWL", lang: "tc" } },
+  { tool: "get_mtr_frequency", args: { lang: "en" } },
   { tool: "get_mtr_schedule", args: { line: "twl", station: "cen", lang: "tc" } },
   { tool: "get_lrt_schedule", args: { station_id: "100", lang: "tc" } },
   { tool: "get_mtr_bus_schedule", args: { route: "K51", lang: "tc" } },

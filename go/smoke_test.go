@@ -37,6 +37,8 @@ var calls = []call{
 	{"get_ctb_stop_eta", map[string]any{"route": "1", "stop_id": "001027", "lang": "tc"}},
 	// MTR
 	{"get_mtr_station_codes", map[string]any{"query": "中環", "lang": "tc"}},
+		{"get_mtr_frequency", map[string]any{"line": "TWL", "lang": "tc"}},
+		{"get_mtr_frequency", map[string]any{"lang": "en"}},
 	{"get_mtr_schedule", map[string]any{"line": "twl", "station": "cen", "lang": "tc"}},
 	{"get_lrt_schedule", map[string]any{"station_id": "100", "lang": "tc"}},
 	{"get_mtr_bus_schedule", map[string]any{"route": "K51", "lang": "tc"}},
@@ -78,8 +80,12 @@ func TestAllTools(t *testing.T) {
 		names = append(names, tl.Name)
 	}
 	t.Logf("server exposes %d tools: %s", len(list.Tools), strings.Join(names, ", "))
-	if len(list.Tools) != len(calls) {
-		t.Errorf("tool count = %d, want %d", len(list.Tools), len(calls))
+	unique := map[string]bool{}
+	for _, c := range calls {
+		unique[c.tool] = true
+	}
+	if len(list.Tools) != len(unique) {
+		t.Errorf("tool count = %d, want %d", len(list.Tools), len(unique))
 	}
 
 	failed := 0

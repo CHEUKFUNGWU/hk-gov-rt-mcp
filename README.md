@@ -13,7 +13,7 @@ An MCP (Model Context Protocol) server wrapping Hong Kong government real-time o
 
 Both support the **stdio** (default) and **Streamable HTTP** (stateless) transports. The initialize handshake negotiates protocol revision **2025-11-25** — the newest revision supported by the current official SDKs (the spec site's latest documentation is 2026-07-28). Every tool carries a `readOnlyHint` annotation, and the server provides top-level `instructions`.
 
-## Tools (23)
+## Tools (24)
 
 All tools accept an optional `lang` parameter: `tc` (Traditional Chinese, default) / `sc` (Simplified Chinese) / `en` (English).
 
@@ -50,6 +50,7 @@ All tools accept an optional `lang` parameter: `tc` (Traditional Chinese, defaul
 |---|---|
 | `get_mtr_schedule` · `line, station` | Heavy rail live schedule: next trains per platform/direction with destination, minutes-to-train (ttnt) and service-delay flag |
 | `get_mtr_station_codes` · `query` | Find line/station codes by station name (any language) or code — embedded 10-line / 120-station table |
+| `get_mtr_frequency` · `line?` | Published average headways (weekday AM/PM peak, off-peak, Sat, Sun & holidays) for all lines/segments and Light Rail routes — static snapshot scraped from mtr.com.hk (`scripts/scrape_mtr_frequencies.py`), answers "how often / still running around <time>" questions; NOT real-time |
 | `get_lrt_schedule` · `station_id` | Light Rail live schedule — embedded 68-stop id table (e.g. 100 = Siu Hong) |
 | `get_mtr_bus_schedule` · `route` | MTR Bus live schedule (upstream unstable at the moment; reported gracefully) |
 
@@ -70,7 +71,7 @@ All tools accept an optional `lang` parameter: `tc` (Traditional Chinese, defaul
 | `get_traffic_speed` | Live average speed / saturation level (GOOD/AVERAGE/BAD) for major road links (speed map XML) |
 | `get_parking_vacancy` · `keyword?` | Live vacant-space counts at TD participating car parks (filter by name / district) |
 
-> **Known upstream issues** — `get_mtr_bus_schedule` (404), `get_traffic_snapshot` (403) and `get_traffic_speed` (503) were broken or access-restricted upstream at development time (2026-10). The tools report this gracefully (readable message + official endpoint) instead of failing; they self-heal once the feeds recover. The other 20 tools are fully operational and verified.
+> **Known upstream issues** — `get_mtr_bus_schedule` (404), `get_traffic_snapshot` (403) and `get_traffic_speed` (503) were broken or access-restricted upstream at development time (2026-10). The tools report this gracefully (readable message + official endpoint) instead of failing; they self-heal once the feeds recover. The other 21 tools are fully operational and verified.
 
 ## Typical flows
 
@@ -136,7 +137,7 @@ npx @modelcontextprotocol/inspector node dist/index.js   # manual inspection
 cd go && go build -o bin/hk-gov-mcp . && go test -v -timeout 12m .
 ```
 
-The smoke tests connect an MCP client over in-memory transport and call all 23 tools against the live upstream APIs.
+The smoke tests connect an MCP client over in-memory transport and call all 24 tools against the live upstream APIs.
 
 ## Caching policy (identical in both implementations)
 
@@ -158,4 +159,5 @@ Upstream timeouts are 10s (30s for the large Citybus route list); failures retur
 - Citybus / MTR / Light Rail / MTR Bus / CID: `rt.data.gov.hk`
 - Green minibus: `data.etagmb.gov.hk`
 - Transport Department: `resource.data.one.gov.hk/td/*` (speed map, car parks), `api.data.gov.hk/v1/carpark-info-vacancy`
+- MTR published frequencies: scraped from `mtr.com.hk` train service page into the embedded `mtr-frequencies.json` (snapshot date inside; refresh with `python3 scripts/scrape_mtr_frequencies.py`)
 - MTR station code tables: generated from `opendata.mtr.com.hk` CSVs (`mtr_lines_and_stations.csv`, `light_rail_routes_and_stops.csv`) into the embedded JSON under `ts/src/transport/data/` and `go/internal/hkapi/data/`

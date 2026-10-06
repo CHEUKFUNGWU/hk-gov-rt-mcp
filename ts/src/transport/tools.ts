@@ -118,6 +118,13 @@ export function registerTransportTools(server: McpServer): void {
       (a: { query: string; lang: Lang }) => mtr.lookupStationCodes(a.query, a.lang),
     ),
     defineTool(
+      "get_mtr_frequency",
+      "MTR published train frequency",
+      "Published average train headways (minutes) for all MTR heavy rail lines (with segments), Airport Express and Light Rail routes: weekday AM/PM peak, off-peak, Saturday, Sunday & holidays. Use for 'how often do trains run' / 'will trains still be running around <time>' questions. This is a STATIC SNAPSHOT scraped from mtr.com.hk (see returned date), NOT real-time — for live arrivals use get_mtr_schedule / get_lrt_schedule.",
+      { line: z.string().optional().describe('Optional filter: line code (e.g. TWL), LRT route number (e.g. 505 or LRT-505), or name fragment; omit for the whole table'), lang: langShape.lang },
+      (a: { line?: string; lang: Lang }) => Promise.resolve(mtr.mtrFrequency(a.line, a.lang)),
+    ),
+    defineTool(
       "get_lrt_schedule",
       "Light Rail schedule",
       "Real-time MTR Light Rail schedule for one stop: routes, destinations and arrival times per platform. Get stop ids from the embedded table (error messages list sample ids).",

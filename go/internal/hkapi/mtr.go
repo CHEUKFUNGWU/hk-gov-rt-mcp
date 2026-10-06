@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-//go:embed data/mtr-stations.json data/lrt-stops.json
+//go:embed data/mtr-stations.json data/lrt-stops.json data/mtr-frequencies.json
 var dataFS embed.FS
 
 type stationEntry struct {
@@ -87,6 +87,15 @@ func TrainSchedule(ctx context.Context, line, station string, lang Lang) (string
 		return fmt.Sprintf("MTR API error %v — check line/station codes. Valid lines: %s.",
 			errObj["errorMsg"], strings.Join(LineCodes(), ", ")), nil
 	}
+	// status:0 = service notice (special arrangements / suspended station)
+	if st, _ := d["status"].(float64); st == 0 {
+		if msg := Str(d, "message"); msg != "" {
+			if u := Str(d, "url"); u != "" {
+				return "MTR service notice: " + msg + "\nInfo: " + u, nil
+			}
+			return "MTR service notice: " + msg, nil
+		}
+	}
 	lc := strings.ToUpper(line)
 	var b strings.Builder
 	for key, val := range Obj(d, "data") {
@@ -120,7 +129,7 @@ func TrainSchedule(ctx context.Context, line, station string, lang Lang) (string
 			fmt.Fprintf(&b, "%s %s\n", arrow, strings.Join(parts, "; "))
 		}
 	}
-	if isDelay, ok := d["isdelay"].(bool); ok && isDelay {
+	if d["isdelay"] == true || d["isdelay"] == "Y" {
 		b.WriteString("⚠ MTR reports service delay.\n")
 	}
 	fmt.Fprintf(&b, "(sys_time %s)", Str(d, "sys_time"))
@@ -220,4 +229,129 @@ func LookupStationCodes(ctx context.Context, query string, lang Lang) (string, e
 	}
 	sort.Strings(lines)
 	return strings.Join(lines, "\n"), nil
+}
+
+/* ---------- published average headways (scraped from mtr.com.hk) ---------- */
+
+type freqEntry struct {
+	Code      string            `json:"code"`
+	LightRail bool              `json:"lightRail"`
+	SegmentTc string            `json:"segmentTc"`
+	SegmentEn string            `json:"segmentEn"`
+	LabelTc   string            `json:"labelTc"`
+	LabelEn   string            `json:"labelEn"`
+	Bands     map[string]string `json:"bands"`
+}
+
+type freqFile struct {
+	ScrapedAt string            `json:"scrapedAt"`
+	Sources   []string          `json:"sources"`
+	BandsTc   map[string]string `json:"bandsTc"`
+	BandsEn   map[string]string `json:"bandsEn"`
+	NotesTc   string            `json:"notesTc"`
+	NotesEn   string            `json:"notesEn"`
+	Entries   []freqEntry       `json:"entries"`
+}
+
+var freqData freqFile
+
+func init() {
+	raw, err := dataFS.ReadFile("data/mtr-frequencies.json")
+	if err == nil {
+		_ = json.Unmarshal(raw, &freqData)
+	}
+}
+
+var bandOrder = []string{"amPeak", "pmPeak", "offPeak", "saturday", "sundayHoliday"}
+
+var bandShort = map[Lang]map[string]string{
+	TC: {"amPeak": "平日朝繁", "pmPeak": "平日晚繁", "offPeak": "非繁忙", "saturday": "週六", "sundayHoliday": "假日"},
+	SC: {"amPeak": "平日朝高峰", "pmPeak": "平日晚高峰", "offPeak": "非高峰", "saturday": "週六", "sundayHoliday": "假日"},
+	EN: {"amPeak": "AM peak", "pmPeak": "PM peak", "offPeak": "Off-peak", "saturday": "Sat", "sundayHoliday": "Sun&PH"},
+}
+
+// MtrFrequency returns the published average headways table, optionally
+// filtered by line code / LRT route / name fragment. Static snapshot.
+func MtrFrequency(line string, lang Lang) string {
+	t := lang == EN
+	all := freqData.Entries
+	list := all
+	if q := strings.ToUpper(strings.TrimSpace(line)); q != "" {
+		list = nil
+		for _, e := range all {
+			code := strings.ToUpper(e.Code)
+			match := code == q || code == "LRT-"+strings.TrimPrefix(q, "LRT-")
+			if !match {
+				name := strings.ToLower(e.LabelTc + e.LabelEn + e.SegmentTc + e.SegmentEn)
+				match = strings.Contains(name, strings.ToLower(strings.TrimSpace(line)))
+			}
+			if match {
+				list = append(list, e)
+			}
+		}
+		if len(list) == 0 {
+			codes := map[string]bool{}
+			for _, e := range all {
+				if e.Code != "" {
+					codes[e.Code] = true
+				}
+			}
+			keys := make([]string, 0, len(codes))
+			for k := range codes {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			return fmt.Sprintf("No frequency entry matching %q. Valid codes: %s.", line, strings.Join(keys, ", "))
+		}
+	}
+	bands := freqData.BandsTc
+	if t {
+		bands = freqData.BandsEn
+	}
+	short := bandShort[lang]
+	header := fmt.Sprintf("MTR published average headways (minutes) — static snapshot scraped %s from mtr.com.hk (not real-time; use get_mtr_schedule / get_lrt_schedule for live arrivals)", freqData.ScrapedAt)
+	if !t {
+		header = fmt.Sprintf("港鐵公佈嘅平均班次（分鐘）— %s 從 mtr.com.hk 擷取嘅靜態快照（並非實時；實時到站請用 get_mtr_schedule / get_lrt_schedule）", freqData.ScrapedAt)
+	}
+	var b strings.Builder
+	b.WriteString(header)
+	b.WriteString("\n")
+	b.WriteString(bands["amPeak"] + " | " + bands["pmPeak"] + " | " + bands["offPeak"] + " | " + bands["saturday"] + " | " + bands["sundayHoliday"])
+	for _, e := range list {
+		nameEn := e.SegmentEn
+		if nameEn == "" {
+			nameEn = e.LabelEn
+		}
+		nameTc := e.SegmentTc
+		if nameTc == "" {
+			nameTc = e.LabelTc
+		}
+		label := e.Code + " "
+		if t {
+			label += nameEn
+		} else {
+			label += nameTc
+			if nameEn != "" && nameEn != nameTc {
+				label += " / " + nameEn
+			}
+		}
+		label += ": "
+		cells := make([]string, 0, len(bandOrder))
+		for _, k := range bandOrder {
+			v := e.Bands[k]
+			if v == "" {
+				v = "-"
+			}
+			cells = append(cells, short[k]+" "+v)
+		}
+		b.WriteString("\n" + label + strings.Join(cells, " | "))
+	}
+	if t {
+		b.WriteString("\n\n" + freqData.NotesEn)
+		b.WriteString("\nSource: " + freqData.Sources[0])
+	} else {
+		b.WriteString("\n\n" + freqData.NotesTc)
+		b.WriteString("\n來源: " + freqData.Sources[0])
+	}
+	return b.String()
 }
